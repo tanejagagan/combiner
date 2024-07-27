@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.dazzleduck.combiner</groupId>
+  <artifactId>connector-spark</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <name>connector-spark</name>
+  <!-- FIXME change it to the project's website -->
+  <url>http://www.example.com</url>
+  <parent>
+    <artifactId>combiner</artifactId>
+    <groupId>io.dazzleduck</groupId>
+    <version>0.1</version>
+  </parent>
+
+  <properties>
+    <spark.version>3.5.1</spark.version>
+    <hadoop.version>3.3.4</hadoop.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <testcontainer.version>1.19.8</testcontainer.version>
+    <maven.compiler.source>15</maven.compiler.source>
+    <maven.compiler.target>15</maven.compiler.target>
+    <scala.version>2.12</scala.version>
+    <scala.release>2.12.19</scala.release>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>5.10.3</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_2.12</artifactId>
+      <version>${spark.version}</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-aws</artifactId>
+      <version>${hadoop.version}</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-bundle -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-bundle</artifactId>
+      <version>1.12.763</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-memory-netty</artifactId>
+      <version>${arrow.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.dazzleduck.combiner</groupId>
+      <artifactId>common</artifactId>
+      <version>0.0.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-c-data</artifactId>
+      <version>${arrow.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <version>${testcontainer.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>minio</artifactId>
+      <version>${testcontainer.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.minio</groupId>
+      <artifactId>minio</artifactId>
+      <version>8.5.11</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_2.12</artifactId>
+      <version>3.5.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+      <groupId>net.alchim31.maven</groupId>
+      <artifactId>scala-maven-plugin</artifactId>
+      <version>4.8.1</version>
+      <executions>
+        <execution>
+          <id>scala-compile</id>
+          <phase>process-resources</phase>
+          <goals>
+            <goal>add-source</goal>
+            <goal>compile</goal>
+          </goals>
+        </execution>
+        <execution>
+          <id>scala-test-compile</id>
+          <phase>process-test-resources</phase>
+          <goals>
+            <goal>testCompile</goal>
+          </goals>
+        </execution>
+      </executions>
+      <configuration>
+        <scalaVersion>${scala.release}</scalaVersion>
+      </configuration>
+    </plugin>
+    </plugins>
+  </build>
+</project>
