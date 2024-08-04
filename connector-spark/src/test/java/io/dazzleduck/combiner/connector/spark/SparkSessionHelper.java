@@ -16,14 +16,13 @@ public class SparkSessionHelper {
     public static final String S3_CATALOG ="dd_catalog_remote";
 
 
-    public static SparkSession getSparkSession (MinIOContainer minio) throws IOException {
+    public static SparkSession getSparkSession (MinIOContainer minio, String localCatalogPath) throws IOException {
         String s3CatalogPath = String.format("s3a://%s/", MinioContainerTestUtil.bucketName);
-        return withTempLocation( location -> {
             return SparkSession
                     .builder()
                     .master("local")
                     .config("spark.sql.catalog.dd_catalog_local", DDInMemoryTableCatalog.class.getName())
-                    .config("spark.sql.catalog.dd_catalog_local.path", location)
+                    .config("spark.sql.catalog.dd_catalog_local.path", localCatalogPath)
                     .config("spark.sql.catalog.dd_catalog_remote", DDInMemoryTableCatalog.class.getName())
                     .config("spark.sql.catalog.dd_catalog_remote.path", s3CatalogPath)
                     .config("spark.sql.parquet.aggregatePushdown", true)
@@ -36,7 +35,6 @@ public class SparkSessionHelper {
                     .config("spark.hadoop.fs.s3a.endpoint", minio.getS3URL())
                     .config("spark.sql.extensions", DDExtensions.class.getName())
                     .getOrCreate();
-        });
     }
 
     public static <R> R withTempLocation(Function<String, R> function) throws IOException {

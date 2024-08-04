@@ -58,14 +58,19 @@ class DDInMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
       throw new TableAlreadyExistsException( ident.name())
     }
     val t = InMemoryTable(ident.name(), columns, partitions, properties)
-    db._2.put(ident.name(), t)
     val path = new Path(getTablePath(ident, properties))
     val fs = path.getFileSystem(SparkSession.active.sessionState.newHadoopConf())
-    fs.mkdirs(path)
+    if(!fs.exists(path)) {
+      fs.mkdirs(path)
+    }
+    db._2.put(ident.name(), t)
     loadTable(ident)
   }
 
   private def getTablePath(identifier: Identifier, properties: util.Map[String, String]): String = {
+    if(properties.containsKey("path")){
+      return properties.get("path")
+    }
     val db = identifier.namespace().map(_.toLowerCase)
     new Path(new Path(_catalogPath, db(0) ), identifier.name().toLowerCase()).toString
   }

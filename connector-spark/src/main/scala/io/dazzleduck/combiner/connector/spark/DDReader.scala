@@ -30,15 +30,16 @@ object DDReader {
     "connection.ssl.enabled" ->("s3_use_ssl",  v=> v)
   )
 
-  def apply(queryObject: QueryObject,
+  def apply( outputSchema : StructType,
+             queryObject: QueryObject,
             parameters  : Map[String, String],
             requiredPartitionSchema : StructType,
             requiredPartitions : InternalRow) : DDReader = {
     val connectionUrl = DDReader.connectionUrl(parameters)
     if (connectionUrl == null) {
-      new DDDirectReader(queryObject, parameters.asJava, requiredPartitionSchema, requiredPartitions)
+      new DDDirectReader(outputSchema, queryObject, parameters.asJava, requiredPartitionSchema, requiredPartitions)
     } else {
-      new DDWebReader(queryObject, parameters.asJava, requiredPartitionSchema, requiredPartitions)
+      new DDWebReader(outputSchema, queryObject, parameters.asJava, requiredPartitionSchema, requiredPartitions)
     }
   }
 
@@ -58,7 +59,8 @@ object DDReader {
     result
   }
 }
-abstract class DDReader(requiredPartitionSchema : StructType,
+abstract class DDReader( outputSchema : StructType,
+                         requiredPartitionSchema : StructType,
                         requiredPartitions : InternalRow) extends PartitionReader[ColumnarBatch]{
 
   var hasNext : Boolean = _
@@ -112,11 +114,11 @@ abstract class DDReader(requiredPartitionSchema : StructType,
   def getReader() : ArrowReader
 }
 
-class DDWebReader(queryObject: QueryObject,
+class DDWebReader(outputSchema : StructType, queryObject: QueryObject,
                   parameters  : JMap[String, String],
                   requiredPartitionSchema : StructType,
                   requiredPartitions : InternalRow,
-                 ) extends DDReader(requiredPartitionSchema, requiredPartitions) {
+                 ) extends DDReader(outputSchema, requiredPartitionSchema, requiredPartitions) {
 
   private val connectionUrl = ParameterHelper.getConnectionUrl(parameters)
   private val stream = CombinerClient.getArrowStream(connectionUrl,
@@ -132,11 +134,12 @@ class DDWebReader(queryObject: QueryObject,
   }
 }
 
-class DDDirectReader(queryObject: QueryObject,
+class DDDirectReader(outputSchema : StructType,
+                     queryObject: QueryObject,
                      parameters  : JMap[String, String],
                      requiredPartitionSchema : StructType,
                      requiredPartitions : InternalRow,
-                    ) extends DDReader(requiredPartitionSchema, requiredPartitions) {
+                    ) extends DDReader(outputSchema, requiredPartitionSchema, requiredPartitions) {
 
   private val batchSize = ConfigParameters.getArrowBatchSize(queryObject.getParameters)
   private val statement = QueryGenerator.DUCK_DB.generate(queryObject, "parquet")

@@ -57,9 +57,12 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
     val sources = new util.ArrayList[String]()
     sources.add(file)
 
+    val partitionSchemaFields = partitionSchema.fields.map(_.name).toSet
+    val requiredPartitionSchema = outputSchema.fields.filter( f => partitionSchemaFields.contains(f.name))
+    val requiredDataSchema =  outputSchema.fields.filterNot( f => partitionSchemaFields.contains(f.name))
     val queryObjectBuilder = QueryObject.builder()
       .predicates(filters.map(_.toString).toList.asJava)
-      .projections(outputSchema.fields.map(_.name).toList.asJava)
+      .projections(requiredDataSchema.map(_.name).toList.asJava)
       .sources(sources)
 
     if (groupBys.nonEmpty) {
@@ -73,8 +76,7 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
       m.putAll(parameters.asJava)
       queryObjectBuilder.parameters(m)
     }
-
-    DDReader(queryObjectBuilder.build(), parameters, partitionSchema, partitionedFile.partitionValues)
+    DDReader(queryObjectBuilder.build(), parameters, new StructType(requiredPartitionSchema), partitionedFile.partitionValues)
   }
 
   def uriToPath(uri: URI): String = {
