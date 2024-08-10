@@ -1,8 +1,8 @@
 package io.dazzleduck.combiner.connector.spark
 
-import io.dazzleduck.combiner.common.{ConfigParameters, ParameterHelper, Pools}
+import io.dazzleduck.combiner.common.{ConfigParameters, ParameterHelper}
 import io.dazzleduck.combiner.common.client.CombinerClient
-import io.dazzleduck.combiner.common.model.{QueryGenerator, QueryObject}
+import io.dazzleduck.combiner.common.model.QueryGenerator
 import io.dazzleduck.combiner.common.model.QueryObject
 import io.dazzleduck.combiner.common.Pools
 import org.apache.arrow.vector.VectorSchemaRoot
@@ -20,21 +20,21 @@ import java.util.{Map => JMap}
 import scala.collection.JavaConverters.{asScalaBufferConverter, mapAsJavaMapConverter}
 
 object DDReader {
-  val hadoopToDuckDBParamValueFu = Map[String, (String, String=> String)](
+  private val hadoopToDuckDBParamValueFn = Map[String, (String, String=> String)](
     "secret.key" -> ("s3_secret_access_key", v => v),
     "access.key" -> ("s3_access_key_id", v => v),
     "endpoint" -> ("s3_endpoint" , v => {
       val uri = URI.create(v)
-      uri.getHost + ":" + uri.getPort()
+      uri.getHost + ":" + uri.getPort
     }),
     "connection.ssl.enabled" ->("s3_use_ssl",  v=> v)
   )
 
   def apply( outputSchema : StructType,
              queryObject: QueryObject,
-            parameters  : Map[String, String],
-            requiredPartitionSchema : StructType,
-            requiredPartitions : InternalRow) : DDReader = {
+             parameters  : Map[String, String],
+             requiredPartitionSchema : StructType,
+             requiredPartitions : InternalRow) : DDReader = {
     val connectionUrl = DDReader.connectionUrl(parameters)
     if (connectionUrl == null) {
       new DDDirectReader(outputSchema, queryObject, parameters.asJava, requiredPartitionSchema, requiredPartitions)
@@ -49,7 +49,7 @@ object DDReader {
 
   def getDuckDBParameters(prefix : String, hadoopConf : Configuration) : JMap[String, String] = {
     val result = new java.util.HashMap[String, String] ()
-    hadoopToDuckDBParamValueFu.foreach{ case(k, (ddKey, valueFn)) =>
+    hadoopToDuckDBParamValueFn.foreach{ case(k, (ddKey, valueFn)) =>
       val key = prefix + k
       val value = hadoopConf.get(key)
       if(value !=null){
@@ -61,7 +61,7 @@ object DDReader {
 }
 abstract class DDReader( outputSchema : StructType,
                          requiredPartitionSchema : StructType,
-                        requiredPartitions : InternalRow) extends PartitionReader[ColumnarBatch]{
+                         requiredPartitions : InternalRow) extends PartitionReader[ColumnarBatch]{
 
   var hasNext : Boolean = _
 
@@ -76,17 +76,31 @@ abstract class DDReader( outputSchema : StructType,
     val vsr = reader.getVectorSchemaRoot
     val valueVectors = getValueVector(vsr)
     val partitionVectors = createPartitionVectors(vsr.getRowCount)
-    val res: ColumnarBatch = new ArrowColumnarBatch(partitionVectors ++ valueVectors,
+    val cbArray = new Array[ ColumnVector](outputSchema.fields.size)
+    var index = 0;
+    var j = 0;
+    outputSchema.fields.foreach{ f =>
+      partitionVectors.get(f.name) match {
+        case Some(p) => cbArray(index) = p
+        case None =>
+          cbArray(index) = valueVectors(j)
+          j +=1
+      }
+      index += 1
+    }
+
+    val res: ColumnarBatch = new ArrowColumnarBatch(cbArray,
       vsr.getRowCount, null)
     setHasNext(reader.loadNextBatch())
     res
   }
 
-  def getValueVector(vsr: VectorSchemaRoot): Array[ColumnVector] = {
-    vsr.getFieldVectors.asScala.map(fv => new ArrowColumnVector(vsr.getVector(fv.getName))).toArray
-  }
+  def getValueVector(vsr: VectorSchemaRoot): Array[ArrowColumnVector] = {
+    vsr.getFieldVectors.asScala.map(fv =>
+      new ArrowColumnVector(vsr.getVector(fv.getName)))
+  }.toArray
 
-  def createPartitionVectors(size : Int ) : Array[ColumnVector] = {
+  def createPartitionVectors(size : Int ) : Map[String, ColumnVector] = {
     requiredPartitionSchema.fields.zipWithIndex.map { case (f, index) =>
       val vector = new ConstantColumnVector(size, f.dataType)
       f.dataType match {
@@ -99,8 +113,8 @@ abstract class DDReader( outputSchema : StructType,
         case TimestampType => vector.setLong(requiredPartitions.getLong(index))
         case TimestampNTZType => vector.setLong(requiredPartitions.getLong(index))
       }
-      vector
-    }
+      (f.name, vector)
+    }.toMap
   }
 
   def setHasNext(n : Boolean): Unit = {

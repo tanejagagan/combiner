@@ -76,7 +76,7 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
       m.putAll(parameters.asJava)
       queryObjectBuilder.parameters(m)
     }
-    DDReader(queryObjectBuilder.build(), parameters, new StructType(requiredPartitionSchema), partitionedFile.partitionValues)
+    DDReader(outputSchema, queryObjectBuilder.build(), parameters, new StructType(requiredPartitionSchema), partitionedFile.partitionValues)
   }
 
   def uriToPath(uri: URI): String = {
