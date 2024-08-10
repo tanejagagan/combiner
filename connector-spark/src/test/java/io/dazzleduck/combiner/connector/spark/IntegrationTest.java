@@ -7,7 +7,6 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -16,11 +15,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.Network;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 import static java.nio.file.Files.createTempDirectory;
 
@@ -49,7 +45,7 @@ public class IntegrationTest {
     }
 
     @AfterAll
-    public static void afterAll() throws Exception {
+    public static void afterAll() {
         sparkSession.stop();
         minio.stop();
         combiner.stop();
@@ -57,7 +53,7 @@ public class IntegrationTest {
 
 
     @Test
-    public void testFilterAndProject() throws IOException {
+    public void testFilterAndProject() {
         var database = "test_local";
         var table = "test";
         var catalog = SparkSessionHelper.LOCAL_CATALOG;
@@ -76,16 +72,11 @@ public class IntegrationTest {
         df.write().mode("append").partitionBy("partition").parquet(getPath(catalogPath, database, table));
         // sparkSession.sql("select key, (value + 10) from test where (value%10) = 0 ").show();
         sparkSession.sql("select key, (value + 10), partition from test where (value%10) = 0 ").show();
-
-        /*
-        System.out.println(res.queryExecution().executedPlan());
-        sparkSession.sql("select key, (value + 10) from test where (value%10) = 0 ").show();
-        res.collect();
-        */
-
     }
+
+
     @Test
-    public void testDDFilterAndProject() throws IOException {
+    public void testDDFilterAndProject() {
         var database = "tests3";
         sparkSession.sql("use " + SparkSessionHelper.S3_CATALOG);
         sparkSession.sql("show databases").show();
@@ -100,7 +91,7 @@ public class IntegrationTest {
     }
 
     @Test
-    public void testRemoteFilterAndProject() throws IOException {
+    public void testRemoteFilterAndProject() {
         var url = CombinerContainerTestUtil.getURL(combiner);
         var database = "tests4";
         sparkSession.sql("use " + SparkSessionHelper.S3_CATALOG);
@@ -120,7 +111,7 @@ public class IntegrationTest {
     }
 
     @Test
-    public void testRemoteAggregation() throws IOException {
+    public void testRemoteAggregation() {
         var url = CombinerContainerTestUtil.getURL(combiner);
         var database = "tests5";
         sparkSession.sql("use " + SparkSessionHelper.S3_CATALOG);
@@ -132,40 +123,11 @@ public class IntegrationTest {
                 String.format("create table test( key string, value int, partition string) using parquet partitioned by (partition) options ('url'='%s', 's3_endpoint'='%s')", url, minioEndpoint));
 
         sparkSession.sql("insert into test values ('k1', 10, 'p1'), ('k2', 20, 'p2')");
-        // Dataset<Row> res = sparkSession.sql("select count(*), sum(value), key from test group by key");
-        // System.out.println(res.queryExecution().executedPlan());
-        // sparkSession.sql("select count(*), sum(value), key from test group by key").show();
-        // res.collect();
         Dataset<Row> res2 = sparkSession.sql("select count(*), sum(value), partition from test group by partition");
         res2.show();
-    }
-
-    public void createTestTableWithOptions(SparkSession sparkSession,
-                                           String database, String table, Map<String, String> options ) {
-        String optionStr = "";
-        if(!options.isEmpty()) {
-            var toAppend = options.entrySet().stream().map(kv->
-                    String.format("'%s'='%s'", kv.getKey(), kv.getValue())).collect(Collectors.joining(","));
-            optionStr = String.format("options (%s)", toAppend);
-        }
-
-        String ddl = String.format("create table %s.%s( key string, value int, partition string) using parquet partitioned by (partition) %s", database, table, optionStr );
-        sparkSession.sql("create table %s.%s( key string, value int, partition string) using parquet partitioned by (partition)");
     }
 
     private String getPath(String catalogPath, String database, String table) {
         return new Path(catalogPath, new Path(database.toLowerCase(Locale.ROOT), table.toLowerCase(Locale.ROOT) )).toString();
     }
-
-    /*
-    @Test
-    public void directWrite() {
-        var schema = (StructType)DataType.fromDDL("key string, value bigint, partition string");
-        var df = sparkSession.createDataFrame(List.of(RowFactory.create("k1", 10, "p1" )), schema);
-        var location = "/tmp/test1";
-        df.write().partitionBy("partition").parquet("/tmp/test1");
-        df.sql("select * from parquet.`/tmp/test1` where key ")
-    }
-
-     */
 }

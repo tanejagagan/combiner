@@ -11,6 +11,7 @@ import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.vectorized.ArrowColumnVector;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -25,10 +26,13 @@ import org.testcontainers.containers.Network;
 
 import java.io.File;
 import java.io.IOException;
+import java.sql.Array;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static io.dazzleduck.combiner.connector.spark.MinioContainerTestUtil.bucketName;
 import static io.dazzleduck.combiner.connector.spark.MinioContainerTestUtil.parquetObjectName;
@@ -88,7 +92,7 @@ public class DDWebReaderTest {
         var queryObject = testS3QueryObject(MinioContainerTestUtil.getS3ParamForRemoteContainer(minio));
         var localObject = testS3QueryObject(MinioContainerTestUtil.getS3ParamForInProcessConnection(minio));
         var sql = QueryGenerator.DuckDBQueryGenerator.DUCK_DB.generate(localObject, "parquet");
-        internalTestWithPartitions(sql, queryObject, new StructType(), null);
+        internalTestWithPartitions(sql, queryObject, fileOutputSchema(), new StructType(), null);
     }
 
     @Test
@@ -106,7 +110,11 @@ public class DDWebReaderTest {
         var expectedSql = QueryGenerator.DuckDBQueryGenerator
                 .DUCK_DB
                 .generate(localObject, "parquet");
-        internalTestWithPartitions(expectedSql, queryObject, partitionSchema, internalRow);
+        internalTestWithPartitions(expectedSql, queryObject,
+                new StructType(
+                        Stream.concat(Arrays.stream(partitionSchema.fields()),
+                                Arrays.stream(fileOutputSchema().fields())).toArray(len -> new StructField[len])),
+                partitionSchema, internalRow);
     }
 
     @Test
@@ -115,22 +123,23 @@ public class DDWebReaderTest {
         var expectedSql = QueryGenerator.DuckDBQueryGenerator
                 .DUCK_DB
                 .generate(queryObject, "parquet");
-        internalTestDirectWithPartitions(expectedSql, queryObject, new StructType(), null);
+        internalTestDirectWithPartitions( expectedSql, queryObject, fileOutputSchema(), new StructType(), null);
 
     }
 
     private void internalTestWithPartitions(String expectedSql, QueryObject queryObject,
-                                            StructType partitionSchema, InternalRow partition) throws SQLException, IOException {
+                                            StructType outputSchema, StructType partitionSchema, InternalRow partition) throws SQLException, IOException {
         String url = CombinerContainerTestUtil.getURL(combiner);
-        DDWebReader reader = new DDWebReader(queryObject,
+        DDWebReader reader = new DDWebReader(outputSchema, queryObject,
                 Map.of(Constants.URL_KEY, url), partitionSchema, partition);
         assertResultsEquals(expectedSql, reader);
     }
 
     private void internalTestDirectWithPartitions(String expectedSql, QueryObject queryObject,
+                                                  StructType outputSchema,
                                                   StructType partitionSchema, InternalRow partition) throws SQLException, IOException {
         String url = CombinerContainerTestUtil.getURL(combiner);
-        DDReader reader = new DDDirectReader(queryObject,
+        DDReader reader = new DDDirectReader(outputSchema, queryObject,
                 Map.of(Constants.URL_KEY, url), partitionSchema, partition);
         assertResultsEquals(expectedSql, reader);
     }
@@ -138,17 +147,21 @@ public class DDWebReaderTest {
     private QueryObject testS3QueryObject(Map<String, String> parameters) {
         File file = new File("src/test/resources/parquet/date=2024-01-01/test.parquet");
         return QueryObject.builder()
-                .projections(List.of("*"))
+                .projections(List.of("key", "value", "time"))
                 .parameters(parameters)
                 .sources(List.of(String.format("s3://%s/%s", bucketName, parquetObjectName)))
                 .build();
+    }
+
+    private StructType fileOutputSchema(){
+        return StructType.fromDDL("key string, value bigint, time timestamp");
     }
 
     private QueryObject testLocalQueryObject(Map<String, String> parameters) {
 
         File file = new File("src/test/resources/parquet/date=2024-01-01/test.parquet");
         return QueryObject.builder()
-                .projections(List.of("*"))
+                .projections(List.of("key", "value", "time"))
                 .parameters(parameters)
                 .sources(List.of(file.getAbsolutePath()))
                 .build();
