@@ -4,10 +4,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
-import org.apache.spark.sql.execution.datasources.v2.FileScan
+import org.apache.spark.sql.execution.datasources.v2.{FileScan, TableSampleInfo}
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -19,13 +21,17 @@ class DDScan(override val sparkSession: SparkSession,
              val hadoopConf: Configuration,
              override val fileIndex: PartitioningAwareFileIndex,
              override val dataSchema: StructType,
+             override val readSchema: StructType,
              override val readDataSchema: StructType,
              override val readPartitionSchema: StructType,
              val pushedFilters: Array[Filter],
              val options: CaseInsensitiveStringMap,
              val pushedAggregate: Option[Aggregation],
              override val partitionFilters: Seq[Expression],
-             override val dataFilters: Seq[Expression]) extends FileScan {
+             override val dataFilters: Seq[Expression],
+             tableSample: Option[TableSampleInfo],
+             pushedLimit: Int,
+             sortOrders: Array[String]) extends FileScan  {
 
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -38,9 +44,12 @@ class DDScan(override val sparkSession: SparkSession,
       broadcastedConf,
       fileIndex.partitionSchema,
       pushedFilters,
-      readSchema(),
+      readSchema,
+      readDataSchema,
+      readPartitionSchema,
       pushedAggregate,
       new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, sqlConf),
-      options.asCaseSensitiveMap().asScala.toMap)
+      options.asCaseSensitiveMap().asScala.toMap,
+      tableSample, pushedLimit, sortOrders)
   }
 }

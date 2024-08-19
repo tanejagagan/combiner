@@ -2,6 +2,8 @@ package io.dazzleduck.combiner.connector.spark;
 
 import io.dazzleduck.combiner.connector.spark.catalog.DDInMemoryTableCatalog;
 import io.dazzleduck.combiner.connector.spark.extension.DDExtensions;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.testcontainers.containers.MinIOContainer;
 
@@ -9,15 +11,19 @@ import java.io.IOException;
 import java.util.function.Function;
 
 import static java.nio.file.Files.createTempDirectory;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class SparkSessionHelper {
+public class SparkHelper {
 
     public static final String LOCAL_CATALOG ="dd_catalog_local";
     public static final String S3_CATALOG ="dd_catalog_remote";
 
 
-    public static SparkSession getSparkSession (MinIOContainer minio, String localCatalogPath) throws IOException {
-        String s3CatalogPath = String.format("s3a://%s/", MinioContainerTestUtil.bucketName);
+    public static SparkSession getSparkSession (MinIOContainer minio,
+                                                String localCatalogPath,
+                                                String s3CatalogPath) throws IOException {
+
             return SparkSession
                     .builder()
                     .master("local")
@@ -40,5 +46,23 @@ public class SparkSessionHelper {
     public static <R> R withTempLocation(Function<String, R> function) throws IOException {
         String tmpdir = createTempDirectory("tmpCatalogs").toFile().getAbsolutePath();
         return function.apply(tmpdir);
+    }
+
+    static void assertEqual(SparkSession sparkSession, String expectedSql, String resultSql) {
+        var expected = sparkSession.sql(expectedSql);
+        var result = sparkSession.sql(resultSql);
+        Row[] e = (Row[] )expected.collect();
+        Row[] r = (Row[] )result.collect();
+        assertArrayEquals(e, r, String.format("\n %s\n %s\n %s\n %s",
+                expectedSql, resultSql,
+                expected.showString(20, 100, false),
+                result.showString(20, 100, false)));
+    }
+    static void assertDFEquals(Dataset<Row> expected, Dataset<Row> result){
+        Row[] e = (Row[] )expected.collect();
+        Row[] r = (Row[] )result.collect();
+        assertArrayEquals(e, r, String.format("\n%s \n%s",
+                expected.showString(20, 100, false),
+                result.showString(20, 100, false)));
     }
 }

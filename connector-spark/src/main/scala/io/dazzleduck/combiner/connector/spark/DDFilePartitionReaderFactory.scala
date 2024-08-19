@@ -3,14 +3,18 @@ package io.dazzleduck.combiner.connector.spark
 import io.dazzleduck.combiner.common.model.QueryObject
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, V2ExpressionUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
-import org.apache.spark.sql.execution.datasources.v2.FilePartitionReaderFactory
+import org.apache.spark.sql.execution.datasources.v2.{FilePartitionReaderFactory, TableSampleInfo}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SparkInternalAccessUtil
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
 
@@ -35,13 +39,20 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
                                         broadcastedConf: Broadcast[SerializableConfiguration],
                                         partitionSchema: StructType,
                                         filters: Array[Filter],
-                                        outputSchema: StructType,
+                                        outputSchema : StructType,
+                                        readDataSchema: StructType,
+                                        readPartitionSchema : StructType,
                                         aggregation: Option[Aggregation],
                                         options: ParquetOptions,
-                                        parameters : Map[String, String])
+                                        parameters : Map[String, String],
+                                        tableSample: Option[TableSampleInfo],
+                                        pushedLimit: Int,
+                                        sortOrders: Array[String])
   extends FilePartitionReaderFactory {
 
   val fileSystemParameterPrefix = "fs.s3a."
+  private val dialect = JdbcDialects.get("jdbc:postgresql")
+
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     throw new IllegalArgumentException("row based reader not supported")
   }
@@ -57,12 +68,11 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
     val sources = new util.ArrayList[String]()
     sources.add(file)
 
-    val partitionSchemaFields = partitionSchema.fields.map(_.name).toSet
-    val requiredPartitionSchema = outputSchema.fields.filter( f => partitionSchemaFields.contains(f.name))
-    val requiredDataSchema =  outputSchema.fields.filterNot( f => partitionSchemaFields.contains(f.name))
+    val _filters = filters.flatMap( f =>
+      dialect.compileExpression(SparkInternalAccessUtil.toV2(f)).toSeq).toList.asJava
     val queryObjectBuilder = QueryObject.builder()
-      .predicates(filters.map(_.toString).toList.asJava)
-      .projections(requiredDataSchema.map(_.name).toList.asJava)
+      .predicates(_filters)
+      .projections(readDataSchema.map(_.name).toList.asJava)
       .sources(sources)
 
     if (groupBys.nonEmpty) {
@@ -76,7 +86,7 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
       m.putAll(parameters.asJava)
       queryObjectBuilder.parameters(m)
     }
-    DDReader(outputSchema, queryObjectBuilder.build(), parameters, new StructType(requiredPartitionSchema), partitionedFile.partitionValues)
+    DDReader(outputSchema, queryObjectBuilder.build(), parameters, readDataSchema, readPartitionSchema, partitionedFile.partitionValues)
   }
 
   def uriToPath(uri: URI): String = {

@@ -68,9 +68,14 @@ class DDInMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
   }
 
   private def getTablePath(identifier: Identifier, properties: util.Map[String, String]): String = {
-    if(properties.containsKey("path")){
+    if(properties.containsKey("path") ){
       return properties.get("path")
     }
+
+    if(properties.containsKey("location") ){
+      return properties.get("location")
+    }
+
     val db = identifier.namespace().map(_.toLowerCase)
     new Path(new Path(_catalogPath, db(0) ), identifier.name().toLowerCase()).toString
   }

@@ -33,6 +33,7 @@ object DDReader {
   def apply( outputSchema : StructType,
              queryObject: QueryObject,
              parameters  : Map[String, String],
+             readDataSchema : StructType,
              requiredPartitionSchema : StructType,
              requiredPartitions : InternalRow) : DDReader = {
     val connectionUrl = DDReader.connectionUrl(parameters)
@@ -60,6 +61,7 @@ object DDReader {
   }
 }
 abstract class DDReader( outputSchema : StructType,
+                         queryObject: QueryObject,
                          requiredPartitionSchema : StructType,
                          requiredPartitions : InternalRow) extends PartitionReader[ColumnarBatch]{
 
@@ -75,19 +77,24 @@ abstract class DDReader( outputSchema : StructType,
     val reader = getReader()
     val vsr = reader.getVectorSchemaRoot
     val valueVectors = getValueVector(vsr)
-    val partitionVectors = createPartitionVectors(vsr.getRowCount)
-    val cbArray = new Array[ ColumnVector](outputSchema.fields.size)
+    val partitionVectors = createPartitionVectors(vsr.getRowCount).toMap
+
+    val cbArray = new Array[ColumnVector](outputSchema.size)
     var index = 0;
     var j = 0;
+
     outputSchema.fields.foreach{ f =>
       partitionVectors.get(f.name) match {
-        case Some(p) => cbArray(index) = p
+        case Some(p) =>
+          cbArray(index) = p
         case None =>
           cbArray(index) = valueVectors(j)
           j +=1
       }
       index += 1
     }
+
+
 
     val res: ColumnarBatch = new ArrowColumnarBatch(cbArray,
       vsr.getRowCount, null)
@@ -100,21 +107,21 @@ abstract class DDReader( outputSchema : StructType,
       new ArrowColumnVector(vsr.getVector(fv.getName)))
   }.toArray
 
-  def createPartitionVectors(size : Int ) : Map[String, ColumnVector] = {
+  def createPartitionVectors(size : Int ) : Array[(String, ColumnVector)] = {
     requiredPartitionSchema.fields.zipWithIndex.map { case (f, index) =>
       val vector = new ConstantColumnVector(size, f.dataType)
       f.dataType match {
-        case IntegerType => vector.setInt( requiredPartitions.getInt(index))
+        case IntegerType => vector.setInt(requiredPartitions.getInt(index))
         case LongType => vector.setLong(requiredPartitions.getLong(index))
         case StringType => vector.setUtf8String(requiredPartitions.getUTF8String(index))
-        case DateType => vector.setInt( requiredPartitions.getInt(index))
-        case d : DecimalType => vector.setDecimal(
+        case DateType => vector.setInt(requiredPartitions.getInt(index))
+        case d: DecimalType => vector.setDecimal(
           requiredPartitions.getDecimal(index, d.precision, d.scale), d.precision)
         case TimestampType => vector.setLong(requiredPartitions.getLong(index))
         case TimestampNTZType => vector.setLong(requiredPartitions.getLong(index))
       }
       (f.name, vector)
-    }.toMap
+    }
   }
 
   def setHasNext(n : Boolean): Unit = {
@@ -128,11 +135,12 @@ abstract class DDReader( outputSchema : StructType,
   def getReader() : ArrowReader
 }
 
-class DDWebReader(outputSchema : StructType, queryObject: QueryObject,
-                  parameters  : JMap[String, String],
-                  requiredPartitionSchema : StructType,
-                  requiredPartitions : InternalRow,
-                 ) extends DDReader(outputSchema, requiredPartitionSchema, requiredPartitions) {
+class DDWebReader(val outputSchema : StructType,
+                  val queryObject: QueryObject,
+                  val parameters  : JMap[String, String],
+                  val requiredPartitionSchema : StructType,
+                  val requiredPartitions : InternalRow,
+                 ) extends DDReader(outputSchema, queryObject, requiredPartitionSchema, requiredPartitions) {
 
   private val connectionUrl = ParameterHelper.getConnectionUrl(parameters)
   private val stream = CombinerClient.getArrowStream(connectionUrl,
@@ -153,7 +161,7 @@ class DDDirectReader(outputSchema : StructType,
                      parameters  : JMap[String, String],
                      requiredPartitionSchema : StructType,
                      requiredPartitions : InternalRow,
-                    ) extends DDReader(outputSchema, requiredPartitionSchema, requiredPartitions) {
+                    ) extends DDReader(outputSchema, queryObject, requiredPartitionSchema, requiredPartitions) {
 
   private val batchSize = ConfigParameters.getArrowBatchSize(queryObject.getParameters)
   private val statement = QueryGenerator.DUCK_DB.generate(queryObject, "parquet")
