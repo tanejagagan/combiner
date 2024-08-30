@@ -20,9 +20,12 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.Network;
+import org.testcontainers.containers.output.Slf4jLogConsumer;
 
 import java.io.File;
 import java.io.IOException;
@@ -42,6 +45,8 @@ public class DDWebReaderTest {
 
     public static Network network = Network.newNetwork();
 
+    public static Logger LOGGER = LoggerFactory.getLogger(DDWebReaderTest.class);
+
     public static GenericContainer<?> combiner = CombinerContainerTestUtil.createContainer("combiner", network);
 
     public static MinIOContainer minio =
@@ -49,10 +54,15 @@ public class DDWebReaderTest {
 
     public static MinioClient minioClient ;
 
+    File localFile = new File("src/test/resources/parquet/date=2024-01-01/test.parquet");
+    File nestedFile = new File("src/test/resources/parquet/nested/file.snappy.parquet");
+
     @BeforeAll
     public static void beforeAll() throws Exception {
         minio.start();
         combiner.start();
+        Slf4jLogConsumer logConsumer = new Slf4jLogConsumer(LOGGER);
+        combiner.followOutput(logConsumer);
         minioClient = MinioContainerTestUtil.createClient(minio);
         minioClient.makeBucket(MakeBucketArgs.builder().bucket(MinioContainerTestUtil.bucketName).build());
         File file = new File("src/test/resources/parquet/date=2024-01-01/test.parquet");
@@ -112,7 +122,7 @@ public class DDWebReaderTest {
         internalTestWithPartitions(expectedSql, queryObject,
                 new StructType(
                         Stream.concat(Arrays.stream(partitionSchema.fields()),
-                                Arrays.stream(fileOutputSchema().fields())).toArray(len -> new StructField[len])),
+                                Arrays.stream(fileOutputSchema().fields())).toArray(StructField[]::new)),
                 partitionSchema, internalRow);
     }
 
@@ -124,6 +134,21 @@ public class DDWebReaderTest {
                 .generate(queryObject, "parquet");
         internalTestDirectWithPartitions( expectedSql, queryObject, fileOutputSchema(), new StructType(), null);
 
+    }
+
+    @Test
+    public void testMapType() throws SQLException, IOException {
+        var connection = Pools.DD_CONNECTION_POOL.get();
+        var s = connection.createStatement();
+        s.execute(String.format("select * from read_parquet('%s')", nestedFile.toString()));
+
+        var rs = (DuckDBResultSet) s.getResultSet();
+        try (var arrowReader = (ArrowReader) rs.arrowExportStream(Pools.ALLOCATOR_POOL.get(), 256)) {
+            while (arrowReader.loadNextBatch()) {
+                var vsr = arrowReader.getVectorSchemaRoot();
+                System.out.println(vsr.contentToTSVString());
+            }
+        }
     }
 
     private void internalTestWithPartitions(String expectedSql, QueryObject queryObject,
@@ -144,7 +169,6 @@ public class DDWebReaderTest {
     }
 
     private QueryObject testS3QueryObject(Map<String, String> parameters) {
-        File file = new File("src/test/resources/parquet/date=2024-01-01/test.parquet");
         return QueryObject.builder()
                 .projections(List.of("key", "value", "time"))
                 .parameters(parameters)
@@ -158,11 +182,10 @@ public class DDWebReaderTest {
 
     private QueryObject testLocalQueryObject(Map<String, String> parameters) {
 
-        File file = new File("src/test/resources/parquet/date=2024-01-01/test.parquet");
         return QueryObject.builder()
                 .projections(List.of("key", "value", "time"))
                 .parameters(parameters)
-                .sources(List.of(file.getAbsolutePath()))
+                .sources(List.of(localFile.getAbsolutePath()))
                 .build();
     }
 
@@ -181,7 +204,7 @@ public class DDWebReaderTest {
                     var array = vsr.getFieldVectors()
                             .stream()
                             .map(fv -> new ArrowColumnVector(vsr.getVector(fv.getName())))
-                            .toArray(a -> new ArrowColumnVector[a]);
+                            .toArray(ArrowColumnVector[]::new);
                     var batch = new ArrowColumnarBatch(array, vsr.getRowCount(), null);
                     expected.add(batch);
                 }

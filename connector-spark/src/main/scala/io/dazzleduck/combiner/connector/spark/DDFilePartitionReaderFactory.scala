@@ -13,7 +13,7 @@ import org.apache.spark.sql.execution.datasources.v2.{FilePartitionReaderFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.SparkInternalAccessUtil
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
@@ -50,7 +50,12 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
                                         sortOrders: Array[String])
   extends FilePartitionReaderFactory {
 
-  val fileSystemParameterPrefix = "fs.s3a."
+  // Check for map type
+  if(containsMapType(outputSchema)){
+    throw new RuntimeException(s"Output schema contains MapType ${outputSchema} which is not yet supported")
+  }
+
+  private val fileSystemParameterPrefix = "fs.s3a."
   private val dialect = JdbcDialects.get("jdbc:postgresql")
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
@@ -72,7 +77,7 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
       dialect.compileExpression(SparkInternalAccessUtil.toV2(f)).toSeq).toList.asJava
     val queryObjectBuilder = QueryObject.builder()
       .predicates(_filters)
-      .projections(readDataSchema.map(_.name).toList.asJava)
+      .projections(readDataSchema.map( f => constructProject(f, None)).toList.asJava)
       .sources(sources)
 
     if (groupBys.nonEmpty) {
@@ -89,6 +94,21 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
     DDReader(outputSchema, queryObjectBuilder.build(), parameters, readDataSchema, readPartitionSchema, partitionedFile.partitionValues)
   }
 
+  private def constructProject(field  : StructField, parentRef : Option[String]) : String = {
+    (field.dataType, parentRef) match {
+      case (StructType(fields), _ ) =>
+        val ref = parentRef match {
+          case Some(p) => p + "." +  field.name
+          case None => field.name
+        }
+        val expr = fields.map(f => f.name -> constructProject(f, Some(ref)))
+          .map{ case (name, e) => name  + ":=" + e}
+        s"struct_pack( ${expr.mkString(",")})"
+      case (_, Some(p)) => p + "." + field.name
+      case (_, None) => field.name
+    }
+  }
+
   def uriToPath(uri: URI): String = {
     if (uri.getScheme == "file") {
       uri.getPath
@@ -103,6 +123,15 @@ case class DDFilePartitionReaderFactory(sqlConf: SQLConf,
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     true
+  }
+
+  private def containsMapType(dataType: DataType ) : Boolean = {
+    dataType match {
+      case s : StructType =>
+        s.fields.exists(f => containsMapType(f.dataType))
+      case map : MapType => true
+      case _ => false
+    }
   }
 }
 

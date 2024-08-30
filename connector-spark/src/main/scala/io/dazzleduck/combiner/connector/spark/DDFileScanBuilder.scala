@@ -78,7 +78,7 @@ class DDFileScanBuilder(sparkSession: SparkSession,
     }
   }
 
-  def getReadSchema() : StructType = {
+  private def getReadSchema: StructType = {
     if(pushAggregationSchema.nonEmpty) {
       pushAggregationSchema
     } else {

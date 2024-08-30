@@ -11,19 +11,23 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.Network;
+import org.testcontainers.containers.output.Slf4jLogConsumer;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import static java.nio.file.Files.createTempDirectory;
 
 public class IntegrationTests {
 
     public static Network network = Network.newNetwork();
+
+    public static Logger LOGGER = LoggerFactory.getLogger(IntegrationTests.class);
 
     public static GenericContainer<?> combiner = CombinerContainerTestUtil.createContainer("combiner", network);
 
@@ -42,7 +46,6 @@ public class IntegrationTests {
                     "value int, " +
                     "ss  struct< ss1 : string, ss2 : string, ss3 : string, ss4 : struct<sss1 : string, sss2 : string>>," +
                     "arr array<bigint>," +
-                    "map map<string, string>," +
                     "partition string";
     public static String database = "test_db";
     public static String remote_table = "test_remote_table";
@@ -56,6 +59,7 @@ public class IntegrationTests {
         catalogPath = String.format("s3a://%s/", MinioContainerTestUtil.bucketName);
         minio.start();
         combiner.start();
+        combiner.followOutput(new Slf4jLogConsumer(LOGGER));
         minioClient = MinioContainerTestUtil.createClient(minio);
         minioClient.makeBucket(MakeBucketArgs.builder().bucket(MinioContainerTestUtil.bucketName).build());
         sparkSession = SparkHelper.getSparkSession(minio, localCatalogPath, catalogPath);
@@ -68,19 +72,17 @@ public class IntegrationTests {
         long[] arr1 = {1l, 2l};
         long[] arr2 = {3l, 4l};
 
-        var map1 = Map.of("k1", "m1v2", "k2", "m1v2");
-        var map2 = Map.of("k1", "m2v2", "k2", "m2v2");
         sparkSession.sql(String.format("use %s", database));
-        var df = sparkSession.createDataFrame(List.of(RowFactory.create("k1", 10, s1, arr1, map1, "p1"),
-                RowFactory.create("k2", 100, s2, arr2, map2, "p2")),
+        var df = sparkSession.createDataFrame(List.of(RowFactory.create("k1", 10, s1, arr1, "p1"),
+                RowFactory.create("k2", 100, s2, arr2, "p2")),
                 StructType.fromDDL(schema));
         writePath = new Path(catalogPath, new Path(database.toLowerCase(Locale.ROOT), remote_table.toLowerCase(Locale.ROOT) )).toString();
         df.write().mode("append").partitionBy("partition").parquet(writePath);
+        df.write().mode("append").parquet("/tmp/nested");
 
         var minioEndpoint = MinioContainerTestUtil.getS3ParamForRemoteContainer(minio).get("s3_endpoint");
         sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('url'='%s', 's3_endpoint'='%s')", remote_table, schema, url, minioEndpoint));
         sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path'='%s')" , direct_table, schema, writePath));
-
     }
 
     @ParameterizedTest
@@ -115,13 +117,14 @@ public class IntegrationTests {
     }
 
     private static String[] getTables() {
-        String [] array = { direct_table, remote_table };
+        String [] array = {  remote_table, direct_table, };
         return array;
     }
 
     public static String[] getTestSQLs() {
         String[] array = {
-                "select ss.ss3, ss.ss1, ss.ss4.sss2, arr[0], map_keys(map) from %s",
+                "select ss.ss3, ss.ss1, ss.ss4.sss2, arr[0] from %s",
+                "select ss, arr from %s",
                 "select hash(key), value from %s where (value + 100) = 200 order by key",
                 "select hash(key), value from %s where partition = 'p1' order by key",
                 "select * from %s where key = 'k1' order by key",
@@ -132,7 +135,6 @@ public class IntegrationTests {
                 "select count(*), sum(value), min(value), max(value), key from %s group by key order by key",
                 "select count(*), sum(value), key, min(value), max(value), key from %s group by key order by key",
                 "select count(*), sum(value), hash(key), min(value), max(value) from %s group by hash(key) order by hash(key)"
-
         };
         return array;
     }

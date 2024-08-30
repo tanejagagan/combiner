@@ -16,7 +16,6 @@ public class MinioContainerTestUtil {
 
     public static Map<String, String> getS3ParamForRemoteContainer(MinIOContainer minio) {
         String hostname = "minio";
-
         return Map.of("s3_endpoint", hostname + ":" + MINIO_S3_PORT,
                 "s3_access_key_id", minio.getUserName(),
                 "s3_secret_access_key", minio.getPassword(),

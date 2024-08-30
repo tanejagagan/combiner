@@ -11,6 +11,13 @@ import java.util.Map;
 
 public class Pools {
 
+    static {
+        try {
+            Class.forName("org.duckdb.DuckDBDriver");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
     public static ThreadLocal<BufferAllocator> ALLOCATOR_POOL = ThreadLocal.withInitial(RootAllocator::new);
 
     public static final Map<String, String> config = Map.of("s3_url_style", "'path'");
@@ -18,6 +25,7 @@ public class Pools {
     public static ThreadLocal<DuckDBConnection> DD_CONNECTION_POOL = ThreadLocal.withInitial(() -> {
         DuckDBConnection conn;
         try {
+
             conn = (DuckDBConnection) DriverManager.getConnection("jdbc:duckdb:");
             setConfig(conn, config);
         } catch (SQLException exception) {

@@ -1,13 +1,4 @@
-Aggregation test
-Schema
-  key
-  value
-  partition
-
-select count(*), sum(value) from table group by key
-select count(*), sum(value) from table group by partition
-select count(*), sum(value) from table group by partition, key
-select count(*), sum(value) from table group by fn(partition) , fn(key)
-select count(*), sum(value) from table group by fn(partition, key)
+Support Map Type. Currently its blocked on DuckDB/ Arrow fix
+Support Hive Table
 
 
