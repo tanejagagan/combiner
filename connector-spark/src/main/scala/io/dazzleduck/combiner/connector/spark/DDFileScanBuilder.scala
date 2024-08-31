@@ -65,7 +65,7 @@ class DDFileScanBuilder(sparkSession: SparkSession,
 
     val _readDataSchema = readDataSchema()
     val _readPartitionSchema = readPartitionSchema()
-    new DDScan(sparkSession,  hadoopConf, fileIndex, schema, getReadSchema(), _readDataSchema,
+    new DDScan(sparkSession,  hadoopConf, fileIndex, schema, getReadSchema, _readDataSchema,
       _readPartitionSchema, pushedDataFilters, options, pushedAggregations,
       partitionFilters, dataFilters, tableSample, pushedLimit, sortOrders )
   }
