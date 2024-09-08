@@ -81,7 +81,7 @@ public class IntegrationTests {
         df.write().mode("append").parquet("/tmp/nested");
 
         var minioEndpoint = MinioContainerTestUtil.getS3ParamForRemoteContainer(minio).get("s3_endpoint");
-        sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('url'='%s', 's3_endpoint'='%s')", remote_table, schema, url, minioEndpoint));
+        sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path' = '%s', 'url'='%s', 's3_endpoint'='%s')", remote_table, schema, writePath, url, minioEndpoint));
         sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path'='%s')" , direct_table, schema, writePath));
     }
 

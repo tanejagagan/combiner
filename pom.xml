@@ -9,6 +9,7 @@
     <modules>
         <module>common</module>
         <module>connector-spark</module>
+        <module>server</module>
     </modules>
     <properties>
         <packaging>pom</packaging>
@@ -28,7 +29,7 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>RELEASE</version>
-            <scope>compile</scope>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.minio</groupId>
