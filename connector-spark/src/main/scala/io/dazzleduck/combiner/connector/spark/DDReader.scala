@@ -65,23 +65,19 @@ abstract class DDReader( outputSchema : StructType,
                          requiredPartitionSchema : StructType,
                          requiredPartitions : InternalRow) extends PartitionReader[ColumnarBatch]{
 
-  var hasNext : Boolean = _
 
   override def next(): Boolean = {
-    getHasNext
+    reader.loadNextBatch()
   }
 
-  def getHasNext : Boolean = this.hasNext
-
   override def get(): ColumnarBatch = {
-    val reader = getReader()
     val vsr = reader.getVectorSchemaRoot
     val valueVectors = getValueVector(vsr)
     val partitionVectors = createPartitionVectors(vsr.getRowCount).toMap
 
     val cbArray = new Array[ColumnVector](outputSchema.size)
-    var index = 0;
-    var j = 0;
+    var index = 0
+    var j = 0
 
     outputSchema.fields.foreach{ f =>
       partitionVectors.get(f.name) match {
@@ -94,20 +90,17 @@ abstract class DDReader( outputSchema : StructType,
       index += 1
     }
 
-
-
     val res: ColumnarBatch = new ArrowColumnarBatch(cbArray,
       vsr.getRowCount, null)
-    setHasNext(reader.loadNextBatch())
     res
   }
 
-  def getValueVector(vsr: VectorSchemaRoot): Array[ArrowColumnVector] = {
+  private def getValueVector(vsr: VectorSchemaRoot): Array[ArrowColumnVector] = {
     vsr.getFieldVectors.asScala.map(fv =>
       new ArrowColumnVector(vsr.getVector(fv.getName)))
   }.toArray
 
-  def createPartitionVectors(size : Int ) : Array[(String, ColumnVector)] = {
+  private def createPartitionVectors(size : Int ) : Array[(String, ColumnVector)] = {
     requiredPartitionSchema.fields.zipWithIndex.map { case (f, index) =>
       val vector = new ConstantColumnVector(size, f.dataType)
       f.dataType match {
@@ -124,15 +117,12 @@ abstract class DDReader( outputSchema : StructType,
     }
   }
 
-  def setHasNext(n : Boolean): Unit = {
-    this.hasNext = n
-  }
 
   override def close(): Unit = {
-    getReader().close()
+    reader.close()
   }
 
-  def getReader() : ArrowReader
+  def reader : ArrowReader
 }
 
 class DDWebReader(val outputSchema : StructType,
@@ -145,10 +135,7 @@ class DDWebReader(val outputSchema : StructType,
   private val connectionUrl = ParameterHelper.getConnectionUrl(parameters)
   private val stream = CombinerClient.getArrowStream(connectionUrl,
     queryObject)
-  private val reader = new ArrowStreamReader(stream, Pools.ALLOCATOR_POOL.get())
-  setHasNext(reader.loadNextBatch())
-
-  override def getReader(): ArrowReader = reader
+  override val reader = new ArrowStreamReader(stream, Pools.ALLOCATOR_POOL.get())
 
   override def close(): Unit = {
     super.close()
@@ -169,10 +156,7 @@ class DDDirectReader(outputSchema : StructType,
   private val p_stmt = conn.prepareStatement(statement)
   private val resultSet = p_stmt.executeQuery.asInstanceOf[DuckDBResultSet]
   private val allocator = Pools.ALLOCATOR_POOL.get()
-  private val reader = resultSet.arrowExportStream(allocator, batchSize).asInstanceOf[ArrowReader]
-  super.setHasNext(reader.loadNextBatch())
-
-  override def getReader(): ArrowReader = reader
+  override val reader: ArrowReader = resultSet.arrowExportStream(allocator, batchSize).asInstanceOf[ArrowReader]
 
   override def close(): Unit = {
     super.close()

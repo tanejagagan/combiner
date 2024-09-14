@@ -69,8 +69,8 @@ public class IntegrationTests {
         sparkSession.sql(String.format("create database %s", database));
         var s1 = RowFactory.create("ss11", "ss12", "ss13", RowFactory.create("sss11", "sss12"));
         var s2 = RowFactory.create("ss21", "ss22", "ss13", RowFactory.create("sss21", "sss22"));
-        long[] arr1 = {1l, 2l};
-        long[] arr2 = {3l, 4l};
+        long[] arr1 = {1L, 2L};
+        long[] arr2 = {3L, 4L};
 
         sparkSession.sql(String.format("use %s", database));
         var df = sparkSession.createDataFrame(List.of(RowFactory.create("k1", 10, s1, arr1, "p1"),
@@ -92,6 +92,7 @@ public class IntegrationTests {
         String pathSql = String.format(sql, "parquet.`" + writePath + "`");
         sparkSession.sql(String.format("use %s", catalog));
         SparkHelper.assertEqual(sparkSession, pathSql, remoteTableSql);
+        SparkHelper.assertDDExecution(sparkSession, remoteTableSql);
     }
 
     public static Arguments[] getTestSQLsAndCatalogs() {
@@ -100,11 +101,11 @@ public class IntegrationTests {
         String [] tables = getTables();
         Arguments[] result = new Arguments[catalogs.length * testSQLs.length * tables.length];
         int index = 0;
-        for(int i =0 ; i < catalogs.length; i ++){
-            for(int j =0 ; j < tables.length; j ++) {
-                for (int k = 0; k < testSQLs.length; k++) {
-                    result[index] = Arguments.of(catalogs[i], tables[j], testSQLs[k]);
-                    index ++;
+        for (String s : catalogs) {
+            for (String table : tables) {
+                for (String testSQL : testSQLs) {
+                    result[index] = Arguments.of(s, table, testSQL);
+                    index++;
                 }
             }
         }
@@ -112,31 +113,31 @@ public class IntegrationTests {
     }
 
     public static String[] getCatalogs() {
-        String[] array = { catalog };
-        return array;
+        return new String[]{ catalog };
     }
 
     private static String[] getTables() {
-        String [] array = {  remote_table, direct_table, };
-        return array;
+        return new String[]{
+                remote_table,
+                direct_table, };
     }
 
     public static String[] getTestSQLs() {
-        String[] array = {
+        return new String[]{
+                "select * from %s",
+                "select count(*) from %s",
                 "select ss.ss3, ss.ss1, ss.ss4.sss2, arr[0] from %s",
                 "select ss, arr from %s",
                 "select hash(key), value from %s where (value + 100) = 200 order by key",
                 "select hash(key), value from %s where partition = 'p1' order by key",
                 "select * from %s where key = 'k1' order by key",
                 "select * from %s order by key",
-                "select count(*) from %s",
                 "select count(*), partition from %s group by partition order by partition",
                 "select count(*), partition, sum(value), min(value), max(value), partition from %s group by partition order by partition",
                 "select count(*), sum(value), min(value), max(value), key from %s group by key order by key",
                 "select count(*), sum(value), key, min(value), max(value), key from %s group by key order by key",
                 "select count(*), sum(value), hash(key), min(value), max(value) from %s group by hash(key) order by hash(key)"
         };
-        return array;
     }
 
     @AfterAll

@@ -1,4 +1,4 @@
-package io.dazzleduck.combiner.connector.spark.catalog
+package io.dazzleduck.combiner.catalog
 
 import io.dazzleduck.combiner.connector.spark.DDTable
 import org.apache.hadoop.fs.Path
@@ -16,12 +16,12 @@ import scala.collection.JavaConverters.{enumerationAsScalaIteratorConverter, map
 
 case class InMemoryTable(name : String, columns: Array[Column], partitions: Array[Transform], properties: util.Map[String, String] )
 
-class DDInMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
+class InMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
 
-  val inMemoryCatalog = new ConcurrentHashMap[String, (Map[String, String], ConcurrentHashMap[String, InMemoryTable])]()
+  private val inMemoryCatalog = new ConcurrentHashMap[String, (Map[String, String], ConcurrentHashMap[String, InMemoryTable])]()
 
   var _name : String = _
-  var _catalogPath : String = _
+  private var _catalogPath : String = _
   override def name: String = {
     _name
   }
@@ -92,9 +92,9 @@ class DDInMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
     }
     val userSpecifiedSchema =
       Some(new StructType(table.columns.map( c =>
-        new StructField(c.name, c.dataType)).toArray))
+        StructField(c.name, c.dataType))))
 
-    return new DDTable(table.name,
+    new DDTable(table.name,
       SparkSession.active,
       new CaseInsensitiveStringMap(table.properties),
       Seq(getTablePath(ident, table.properties)),
