@@ -1,0 +1,18 @@
+POC TODO
+-
+- 1B requests in 10 parallel threads.
+- Metrics collection.
+- Error messages are not showing.
+- Limit check.
+- Multiple s3 container test
+- Native docker container ( Apache arrow JNI bug)
+
+Done
+- Performance Test. Single File
+- Test with very large content 1GB.
+- Make the factory object work with (@SerdeImport(QueryObjectWithFactory.class) )
+
+Next Version TODO
+- Not found.
+- Load Average.
+- Validation is not working.

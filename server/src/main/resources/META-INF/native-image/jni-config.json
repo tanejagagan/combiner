@@ -1,0 +1,163 @@
+[
+{
+  "name":"Ljava.lang.Object;"
+},
+{
+  "name":"Ljava.lang.RuntimeException;"
+},
+{
+  "name":"Lorg.apache.arrow.c.ArrayStreamExporter$ExportedArrayStreamPrivateData;"
+},
+{
+  "name":"Lorg.apache.arrow.c.jni.CDataJniException;"
+},
+{
+  "name":"Lorg.apache.arrow.c.jni.PrivateData;"
+},
+{
+  "name":"[B"
+},
+{
+  "name":"[Lcom.sun.management.internal.DiagnosticCommandArgumentInfo;"
+},
+{
+  "name":"[Lcom.sun.management.internal.DiagnosticCommandInfo;"
+},
+{
+  "name":"[Ljava.lang.String;"
+},
+{
+  "name":"com.sun.management.internal.DiagnosticCommandArgumentInfo",
+  "methods":[{"name":"<init>","parameterTypes":["java.lang.String","java.lang.String","java.lang.String","java.lang.String","boolean","boolean","boolean","int"] }]
+},
+{
+  "name":"com.sun.management.internal.DiagnosticCommandInfo",
+  "methods":[{"name":"<init>","parameterTypes":["java.lang.String","java.lang.String","java.lang.String","java.lang.String","java.lang.String","java.lang.String","boolean","java.util.List"] }]
+},
+{
+  "name":"java.lang.Boolean",
+  "methods":[{"name":"booleanValue","parameterTypes":[] }, {"name":"getBoolean","parameterTypes":["java.lang.String"] }]
+},
+{
+  "name":"java.lang.Byte",
+  "methods":[{"name":"byteValue","parameterTypes":[] }]
+},
+{
+  "name":"java.lang.Double",
+  "methods":[{"name":"doubleValue","parameterTypes":[] }]
+},
+{
+  "name":"java.lang.Float",
+  "methods":[{"name":"floatValue","parameterTypes":[] }]
+},
+{
+  "name":"java.lang.Integer",
+  "methods":[{"name":"intValue","parameterTypes":[] }]
+},
+{
+  "name":"java.lang.Long",
+  "methods":[{"name":"longValue","parameterTypes":[] }]
+},
+{
+  "name":"java.lang.Object",
+  "methods":[{"name":"toString","parameterTypes":[] }]
+},
+{
+  "name":"java.lang.Short",
+  "methods":[{"name":"shortValue","parameterTypes":[] }]
+},
+{
+  "name":"java.lang.String",
+  "methods":[{"name":"getBytes","parameterTypes":["java.nio.charset.Charset"] }]
+},
+{
+  "name":"java.math.BigDecimal",
+  "methods":[{"name":"longValue","parameterTypes":[] }, {"name":"precision","parameterTypes":[] }, {"name":"scale","parameterTypes":[] }, {"name":"scaleByPowerOfTen","parameterTypes":["int"] }, {"name":"toPlainString","parameterTypes":[] }]
+},
+{
+  "name":"java.nio.ByteBuffer"
+},
+{
+  "name":"java.nio.CharBuffer",
+  "methods":[{"name":"toString","parameterTypes":[] }]
+},
+{
+  "name":"java.nio.charset.Charset",
+  "methods":[{"name":"decode","parameterTypes":["java.nio.ByteBuffer"] }, {"name":"forName","parameterTypes":["java.lang.String"] }]
+},
+{
+  "name":"java.sql.SQLException"
+},
+{
+  "name":"java.util.Arrays",
+  "methods":[{"name":"asList","parameterTypes":["java.lang.Object[]"] }]
+},
+{
+  "name":"java.util.Iterator",
+  "methods":[{"name":"hasNext","parameterTypes":[] }, {"name":"next","parameterTypes":[] }]
+},
+{
+  "name":"java.util.Map",
+  "methods":[{"name":"entrySet","parameterTypes":[] }]
+},
+{
+  "name":"java.util.Map$Entry",
+  "methods":[{"name":"getKey","parameterTypes":[] }, {"name":"getValue","parameterTypes":[] }]
+},
+{
+  "name":"java.util.Set",
+  "methods":[{"name":"iterator","parameterTypes":[] }]
+},
+{
+  "name":"java.util.UUID",
+  "methods":[{"name":"getLeastSignificantBits","parameterTypes":[] }, {"name":"getMostSignificantBits","parameterTypes":[] }]
+},
+{
+  "name":"org.apache.arrow.c.ArrayStreamExporter$ExportedArrayStreamPrivateData",
+  "fields":[{"name":"lastError"}],
+  "methods":[{"name":"getNext","parameterTypes":["long"] }, {"name":"getSchema","parameterTypes":["long"] }]
+},
+{
+  "name":"org.apache.arrow.c.jni.CDataJniException",
+  "methods":[{"name":"<init>","parameterTypes":["int","java.lang.String"] }]
+},
+{
+  "name":"org.apache.arrow.c.jni.PrivateData",
+  "methods":[{"name":"close","parameterTypes":[] }]
+},
+{
+  "name":"org.duckdb.DuckDBArray",
+  "methods":[{"name":"<init>","parameterTypes":["org.duckdb.DuckDBVector","int","int"] }]
+},
+{
+  "name":"org.duckdb.DuckDBDate",
+  "methods":[{"name":"getDaysSinceEpoch","parameterTypes":[] }]
+},
+{
+  "name":"org.duckdb.DuckDBResultSetMetaData",
+  "methods":[{"name":"<init>","parameterTypes":["int","int","java.lang.String[]","java.lang.String[]","java.lang.String[]","java.lang.String"] }]
+},
+{
+  "name":"org.duckdb.DuckDBStruct",
+  "methods":[{"name":"<init>","parameterTypes":["java.lang.String[]","org.duckdb.DuckDBVector[]","int","java.lang.String"] }]
+},
+{
+  "name":"org.duckdb.DuckDBTime"
+},
+{
+  "name":"org.duckdb.DuckDBTimestamp",
+  "methods":[{"name":"getMicrosEpoch","parameterTypes":[] }]
+},
+{
+  "name":"org.duckdb.DuckDBTimestampTZ"
+},
+{
+  "name":"org.duckdb.DuckDBVector",
+  "fields":[{"name":"constlen_data"}, {"name":"varlen_data"}],
+  "methods":[{"name":"<init>","parameterTypes":["java.lang.String","int","boolean[]"] }]
+},
+{
+  "name":"sun.management.VMManagementImpl",
+  "fields":[{"name":"compTimeMonitoringSupport"}, {"name":"currentThreadCpuTimeSupport"}, {"name":"objectMonitorUsageSupport"}, {"name":"otherThreadCpuTimeSupport"}, {"name":"remoteDiagnosticCommandsSupport"}, {"name":"synchronizerUsageSupport"}, {"name":"threadAllocatedMemorySupport"}, {"name":"threadContentionMonitoringSupport"}]
+}
+]

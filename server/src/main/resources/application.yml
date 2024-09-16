@@ -1,0 +1,25 @@
+netty:
+  default:
+    allocator:
+      chunk-size : 524288
+micronaut:
+  io:
+    netty:
+      default:
+        allocator:
+          chunk-size: 524288
+
+  executors:
+    io:
+      type: fixed
+      nThreads: 5
+
+  endpoints:
+    health:
+      enabled: true
+      sensitive: true
+      details-visible: AUTHENTICATED
+
+  health:
+    monitor:
+      enabled: true
