@@ -1,5 +1,6 @@
 package io.dazzleduck.combiner.catalog
 
+import io.dazzleduck.combiner.catalog.CatalogImpl.DEFAULT_NAMESPACE
 import io.dazzleduck.combiner.connector.spark.DDTable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -12,28 +13,39 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 import java.util
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.JavaConverters._
 
 
-
+object CatalogImpl {
+  val DEFAULT_PATH = "dd-catalog"
+  val DEFAULT_NAMESPACE = Array("default")
+}
 class CatalogImpl extends TableCatalog with ViewCatalog with SupportsNamespaces {
 
   private val readWriteLock = new ReentrantReadWriteLock();
   private var _name : String = _
   private var _path : String = _
   private var _catalogDAO : CatalogFileSystemCommitter = _
+  private var _options : CaseInsensitiveStringMap = _
 
   override def name: String = {
     _name
   }
 
   override def initialize(name: String, options: CaseInsensitiveStringMap) : Unit = {
-    val path = options.get("path")
+    var path = options.get("path")
+    if(path == null)
+      path = new Path(System.getProperty("user.dir"), CatalogImpl.DEFAULT_PATH).toString
     _name = name
-    _path = path;
+    _path = path
     _catalogDAO = new CatalogFileSystemCommitter(new Path(_path, "_metadata").toString, SparkSession.active.sessionState.newHadoopConf())
+    _options = options
+    if(!this.namespaceExists(DEFAULT_NAMESPACE)){
+      createNamespace(DEFAULT_NAMESPACE, Collections.emptyMap())
+    }
   }
 
   private val namespaceDAOMap = new ConcurrentHashMap[String, CatalogFileSystemCommitter]()

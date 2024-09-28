@@ -25,11 +25,8 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.TPCDSSchema
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -68,9 +65,9 @@ object TPCDSQueryBenchmark extends Logging {
       .set("spark.hadoop.fs.s3a.path.style.access", "true")
       .set("spark.hadoop.fs.s3a.secret.key","minioadmin")
       .set("spark.hadoop.fs.s3a.access.key", "minioadmin")
-      .set("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000")
-      .set("spark.sql.catalog.dd", classOf[InMemoryTableCatalog].getName)
-      .set("spark.sql.catalog.dd.path", "s3a://spark/catalog-in-memory")
+      .set("spark.hadoop.fs.s3a.endpoint", "localhost:9000")
+      .set("spark.sql.catalog.dd", classOf[CatalogImpl].getName)
+      .set("spark.sql.catalog.dd.path", "s3a://spark/catalog")
 
 
     SparkSession.builder().config(conf).getOrCreate()
@@ -83,41 +80,42 @@ object TPCDSQueryBenchmark extends Logging {
     "time_dim", "web_page")
 
   private def setupTables(dataLocation: String,
-                          tableColumns: Map[String, StructType]): Map[String, Long] =
-    tables.map { tableName =>
-      // spark.sql(s"DROP TABLE IF EXISTS $tableName")
-      val options = Map("path" -> s"$dataLocation/$tableName"
-        //, "url" -> "http://localhost:8080/v1/q/parquet", "s3_endpoint" -> "localhost:9000"
-      )
-      val format = spark.conf.get("spark.sql.sources.default")
-      val optionString = options.map { case(k, v) =>
-        s"'$k'='$v'"
-      }.mkString(",")
+                          tableColumns: Map[String, StructType],
+                          catalog :String) : Map[String, Long] = {
+      tables.map { tableName =>
+        val options = Map("path" -> s"$dataLocation/$tableName",
+          "url" -> "http://localhost:8080/v1/q/parquet",
+          "s3_endpoint" -> "localhost:9000"
+        )
+        val format = spark.conf.get("spark.sql.sources.default")
+        val optionString = options.map { case (k, v) =>
+          s"'$k'='$v'"
+        }.mkString(",")
 
-      logInfo(
-        s"""CREATE TABLE IF NOT EXISTS $tableName
-           | (${tableColumns(tableName).toDDL})
-           | option ($optionString)""".stripMargin)
+        if (!spark.catalog.tableExists(tableName)) {
+          logInfo(
+            s"""CREATE TABLE IF NOT EXISTS $tableName
+               | (${tableColumns(tableName).toDDL})
+               | option ($optionString)""".stripMargin)
 
-      spark.catalog.createTable(tableName, format, tableColumns(tableName), options)
-      // Recover partitions but don't fail if a table is not partitioned.
-      Try {
-        spark.sql(s"ALTER TABLE $tableName RECOVER PARTITIONS")
-      }.getOrElse {
-        logInfo(s"Recovering partitions of table $tableName failed")
+          spark.catalog.createTable(tableName, format, tableColumns(tableName), options)
+
+          // Recover partitions but don't fail if a table is not partitioned.
+          Try {
+            spark.sql(s"ALTER TABLE $tableName RECOVER PARTITIONS")
+          }.getOrElse {
+            logInfo(s"Recovering partitions of table $tableName failed")
+          }
+        }
+        tableName -> spark.table(tableName).count()
       }
-
-      spark.sql(s"show create table $tableName")
-        .show(truncate = false)
-
-      spark.table(tableName).show()
-      tableName -> spark.table(tableName).count()
-    }.toMap
+  }.toMap
 
   private def runTpcdsQueries(
                        queryLocation: String,
                        queries: Seq[String],
                        tableSizes: Map[String, Long],
+                       catalog : String,
                        nameSuffix: String = ""): Unit = {
     queries.foreach { name =>
       val queryString = resourceToString(s"$queryLocation/$name.sql",
@@ -125,6 +123,7 @@ object TPCDSQueryBenchmark extends Logging {
 
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan.
+      /*
       val queryRelations = scala.collection.mutable.HashSet[String]()
       spark.sparkContext.setJobGroup(name, s"$name:\n$queryString", interruptOnCancel = true)
       spark.sql(queryString).queryExecution.analyzed.foreach {
@@ -137,12 +136,19 @@ object TPCDSQueryBenchmark extends Logging {
         case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
-      val benchmark = new Benchmark("TPCDS", numRows, 2, output = None)
-      benchmark.addCase(s"$name$nameSuffix") { _ =>
-        spark.sql(queryString).collect()
+
+
+       */
+
+
+        val benchmark = new Benchmark("TPCDS", -1, 2, output = None)
+        benchmark.addCase(s"$name$nameSuffix") { _ =>
+          spark.sql(s"USE $catalog")
+          spark.sql(queryString).collect()
+        }
+        benchmark.run()
       }
-      benchmark.run()
-    }
+
   }
 
   private def filterQueries(
@@ -160,8 +166,8 @@ object TPCDSQueryBenchmark extends Logging {
     }
   }
 
-  def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val benchmarkArgs = new TPCDSQueryBenchmarkArguments(mainArgs)
+  def runBenchmarkSuite(benchmarkArgs : TPCDSQueryBenchmarkArguments,
+                        catalog : String) : Unit = {
 
     // List of all TPC-DS v1.4 queries
     val tpcdsQueries = Seq(
@@ -194,11 +200,13 @@ object TPCDSQueryBenchmark extends Logging {
         s"Empty queries to run. Bad query name filter: ${benchmarkArgs.queryFilter}")
     }
 
-    spark.sql(s"USE ${benchmarkArgs.catalog}")
+    spark.sql(s"USE ${benchmarkArgs.catalogs}")
     spark.sql("CREATE DATABASE IF NOT EXISTS default");
     spark.sql("USE default");
-    val tableSizes = setupTables(benchmarkArgs.dataLocation,
-      TPCDSSchemaHelper.getTableColumns)
+
+    val tableSizes =
+      setupTables(benchmarkArgs.dataLocation,
+        TPCDSSchemaHelper.getTableColumns, catalog)
     if (benchmarkArgs.cboEnabled) {
       spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=true")
       spark.sql(s"SET ${SQLConf.PLAN_STATS_ENABLED.key}=true")
@@ -218,7 +226,7 @@ object TPCDSQueryBenchmark extends Logging {
 
     try {
       Thread.sleep(30 * 1000)
-      runTpcdsQueries(queryLocation = "tpcds/queries", queries = queriesV1_4ToRun, tableSizes)
+      runTpcdsQueries(queryLocation = "tpcds/queries", queries = queriesV1_4ToRun, tableSizes, catalog)
       // runTpcdsQueries(queryLocation = "tpcds-v2.7.0", queries = queriesV2_7ToRun, tableSizes,
       //  nameSuffix = nameSuffixForQueriesV2_7)
     } catch {
@@ -228,7 +236,10 @@ object TPCDSQueryBenchmark extends Logging {
   }
 
   def main(args : Array[String]): Unit = {
-    runBenchmarkSuite(args)
+    val benchmarkArgs = new TPCDSQueryBenchmarkArguments(args)
+    for(catalog <- benchmarkArgs.catalogs) {
+      runBenchmarkSuite(benchmarkArgs, catalog)
+    }
   }
 }
 

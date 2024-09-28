@@ -22,6 +22,7 @@ class InMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
 
   var _name : String = _
   private var _catalogPath : String = _
+  private var _options : CaseInsensitiveStringMap = _
   override def name: String = {
     _name
   }
@@ -29,6 +30,7 @@ class InMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     this._name = name
     this._catalogPath = options.get("path")
+    this._options = options
   }
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
@@ -100,7 +102,6 @@ class InMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
       Seq(getTablePath(ident, table.properties)),
       userSpecifiedSchema,
       classOf[ParquetFileFormat])
-
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = ???

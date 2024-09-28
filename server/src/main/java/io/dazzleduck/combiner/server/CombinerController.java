@@ -22,15 +22,16 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
 @Controller(ServerConstants.QUERY_PATH)
 public class CombinerController {
 
-    private ExecutorService ioExecutor;
+    private final ExecutorService ioExecutor;
 
-    private static Logger logger = LoggerFactory.getLogger(CombinerController.class);
+    private static final Logger logger = LoggerFactory.getLogger(CombinerController.class);
 
     public CombinerController(@Named("io") ExecutorService executorService) {
         this.ioExecutor = executorService;
@@ -49,8 +50,7 @@ public class CombinerController {
             @QueryValue("1024")
             @Positive Integer batchSize) throws IOException {
         var sql = String.format("SELECT * FROM generate_series(%s)", size);
-        var bSize = batchSize != null ? batchSize : ConfigParameters.ARROW_DEFAULT_BATCH_SIZE;
-        return executeAndScheduleCollect(sql, ConfigParameters.getArrowBatchSize(new HashMap<>()));
+        return executeAndScheduleCollect(sql, ConfigParameters.getArrowBatchSize(batchSize));
     }
 
     @Post( uri = ServerConstants.PARQUET_PATH,
@@ -67,7 +67,6 @@ public class CombinerController {
         } catch (RuntimeException sqlGenerationException) {
             return CompletableFuture.failedFuture(new RuntimeSqlException(sqlGenerationException));
         }
-
     }
 
 
@@ -78,7 +77,7 @@ public class CombinerController {
                 var input = new PipedInputStream(output, ServerConstants.DEFAULT_NETWORK_BUFFER);
                 var streamedFile = new StreamedFile(input, MediaType.APPLICATION_OCTET_STREAM_TYPE);
                 var collector = SQLExecutor.executeAndProvideCollect(sql, output, bSize);
-                ioExecutor.execute(() -> collector.executeCollect());
+                ioExecutor.execute(collector::executeCollect);
                 return streamedFile;
             } catch (SQLException e ){
                 logger.error("exception processing sql ", e);

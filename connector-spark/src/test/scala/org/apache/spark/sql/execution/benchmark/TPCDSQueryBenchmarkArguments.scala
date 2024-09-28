@@ -24,7 +24,8 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
   var dataLocation: String = sys.env.getOrElse("SPARK_TPCDS_DATA", null)
   var queryFilter: Set[String] = Set.empty
   var cboEnabled: Boolean = false
-  var catalog : String = "spark_catalog"
+  var catalogs : Seq[String] = Seq("spark_catalog")
+  var setup : Boolean = false
 
   parseArgs(args.toList)
   validateArguments()
@@ -50,8 +51,12 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
           cboEnabled = true
           args = tail
 
-        case optName :: value :: tail if optionMatch("--catalog", optName) =>
-          catalog = value
+        case optName :: value :: tail if optionMatch("--catalogs", optName) =>
+          catalogs = value.split(",").toSeq
+          args = tail
+
+        case optName :: tail if optionMatch("--setup", optName) =>
+          setup = true
           args = tail
 
         case _ =>

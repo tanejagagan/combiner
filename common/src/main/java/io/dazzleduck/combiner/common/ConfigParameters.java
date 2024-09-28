@@ -9,7 +9,6 @@ public class ConfigParameters {
     public final static int ARROW_MIN_BATCH_SIZE = 256;
 
     public static int getArrowBatchSize(Map<String, String > parameters) {
-
         if(parameters == null) {
             return ARROW_DEFAULT_BATCH_SIZE;
         }
@@ -19,4 +18,11 @@ public class ConfigParameters {
                 Math.min(Integer.parseInt(bSizeString), ARROW_MAX_BATCH_SIZE));
     }
 
+    public static int getArrowBatchSize(Integer requestSize) {
+        if (requestSize != null) {
+            return getArrowBatchSize(Map.of(ConfigParameters.BATCH_SIZE_KEY, Integer.toString(requestSize)));
+        } else {
+            return ARROW_DEFAULT_BATCH_SIZE;
+        }
+    }
 }

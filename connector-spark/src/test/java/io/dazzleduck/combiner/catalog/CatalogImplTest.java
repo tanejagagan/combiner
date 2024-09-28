@@ -39,14 +39,15 @@ public class CatalogImplTest {
     @Test
     public void createDeleteNamespace() throws IOException {
         int result = withNewCatalog( "test", (dir, catalog) -> {
+            assertEquals(1, catalog.listNamespaces().length);
             var toCreate1 = new String[] {"test1"};
             var toCreate2 = new String[] {"test2"};
             catalog.createNamespace(toCreate2,
                     Collections.emptyMap());
             catalog.createNamespace(toCreate1, Collections.emptyMap());
-            assertEquals( 2, catalog.listNamespaces().length);
+            assertEquals( 3, catalog.listNamespaces().length);
             catalog.dropNamespace(toCreate2, false);
-            assertEquals(1, catalog.listNamespaces().length);
+            assertEquals(2, catalog.listNamespaces().length);
             return 0;
         });
     }

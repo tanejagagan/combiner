@@ -38,7 +38,7 @@ public class IntegrationTests {
 
     public static String localCatalogPath;
 
-    public static String catalogPath;
+    public static String s3CatalogPath;
 
     public static SparkSession sparkSession;
     public static String schema =
@@ -51,45 +51,61 @@ public class IntegrationTests {
     public static String remote_table = "test_remote_table";
     public static String direct_table = "test_direct_table";
     public static String catalog  = SparkHelper.S3_CATALOG;
-    public static String writePath;
+    public static String localCatalog = SparkHelper.LOCAL_CATALOG;
+    public static String s3WritePath;
+    public static String localWritePath;
 
     @BeforeAll
     public static void beforeAll() throws Exception {
         localCatalogPath = createTempDirectory("tmpCatalogs").toFile().getAbsolutePath();
-        catalogPath = String.format("s3a://%s/", MinioContainerTestUtil.bucketName);
+        s3CatalogPath = String.format("s3a://%s/", MinioContainerTestUtil.bucketName);
         minio.start();
         combiner.start();
         combiner.followOutput(new Slf4jLogConsumer(LOGGER));
         minioClient = MinioContainerTestUtil.createClient(minio);
         minioClient.makeBucket(MakeBucketArgs.builder().bucket(MinioContainerTestUtil.bucketName).build());
-        sparkSession = SparkHelper.getSparkSession(minio, localCatalogPath, catalogPath);
-        var url = CombinerContainerTestUtil.getURL(combiner);
-        sparkSession.sql("use " + catalog);
-        sparkSession.sql("show databases").show();
-        sparkSession.sql(String.format("create database %s", database));
+        sparkSession = SparkHelper.getSparkSession(minio, localCatalogPath, s3CatalogPath);
+
+        //Create dataframe to write
         var s1 = RowFactory.create("ss11", "ss12", "ss13", RowFactory.create("sss11", "sss12"));
         var s2 = RowFactory.create("ss21", "ss22", "ss13", RowFactory.create("sss21", "sss22"));
         long[] arr1 = {1L, 2L};
         long[] arr2 = {3L, 4L};
-
-        sparkSession.sql(String.format("use %s", database));
         var df = sparkSession.createDataFrame(List.of(RowFactory.create("k1", 10, s1, arr1, "p1"),
-                RowFactory.create("k2", 100, s2, arr2, "p2")),
+                        RowFactory.create("k2", 100, s2, arr2, "p2")),
                 StructType.fromDDL(schema));
-        writePath = new Path(catalogPath, new Path(database.toLowerCase(Locale.ROOT), remote_table.toLowerCase(Locale.ROOT) )).toString();
-        df.write().mode("append").partitionBy("partition").parquet(writePath);
-        df.write().mode("append").parquet("/tmp/nested");
 
+        // Write to s3
+        sparkSession.sql("use " + catalog);
+        sparkSession.sql("show databases").show();
+        sparkSession.sql(String.format("create database %s", database));
+        sparkSession.sql(String.format("use %s", database));
+        s3WritePath = new Path(s3CatalogPath, new Path(database.toLowerCase(Locale.ROOT), remote_table.toLowerCase(Locale.ROOT))).toString();
+        df.write().mode("append").partitionBy("partition").parquet(s3WritePath);
+
+        // Create required tables in the s3 catalog for remote access
+        var url = CombinerContainerTestUtil.getURL(combiner);
         var minioEndpoint = MinioContainerTestUtil.getS3ParamForRemoteContainer(minio).get("s3_endpoint");
-        sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path' = '%s', 'url'='%s', 's3_endpoint'='%s')", remote_table, schema, writePath, url, minioEndpoint));
-        sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path'='%s')" , direct_table, schema, writePath));
+        sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path' = '%s', 'url'='%s', 's3_endpoint'='%s')", remote_table, schema, s3WritePath, url, minioEndpoint));
+        sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path'='%s')" , direct_table, schema, s3WritePath));
+
+        // Write to local
+        localWritePath = new Path(localCatalogPath, new Path(database.toLowerCase(Locale.ROOT), remote_table.toLowerCase(Locale.ROOT))).toString();
+        df.write().mode("append").partitionBy("partition").parquet(localWritePath);
+
+        // Create required tables in the local catalog.
+        sparkSession.sql("use " + localCatalog);
+        sparkSession.sql("show databases").show();
+        sparkSession.sql(String.format("create database %s", database));
+        sparkSession.sql(String.format("use %s", database));
+        sparkSession.sql(String.format("create table %s( %s) using parquet partitioned by (partition) options ('path'='%s')" , direct_table, schema, localWritePath));
     }
 
     @ParameterizedTest
     @MethodSource("getTestSQLsAndCatalogs")
     void testSql( String catalog, String table, String sql) {
         String remoteTableSql = String.format(sql, database + "." + table);
-        String pathSql = String.format(sql, "parquet.`" + writePath + "`");
+        String pathSql = String.format(sql, "parquet.`" + s3WritePath + "`");
         sparkSession.sql(String.format("use %s", catalog));
         SparkHelper.assertEqual(sparkSession, pathSql, remoteTableSql);
         SparkHelper.assertDDExecution(sparkSession, remoteTableSql);
@@ -99,15 +115,19 @@ public class IntegrationTests {
         String[] testSQLs = getTestSQLs();
         String [] catalogs  = getCatalogs();
         String [] tables = getTables();
-        Arguments[] result = new Arguments[catalogs.length * testSQLs.length * tables.length];
+        String[][] catalogAndTables = getCatalogAndTables();
+        //Arguments[] result = new Arguments[catalogs.length * testSQLs.length * tables.length];
+        Arguments[] result = new Arguments[catalogAndTables.length * testSQLs.length];
+
         int index = 0;
-        for (String s : catalogs) {
-            for (String table : tables) {
+        for (String[] catalogAmdTable : catalogAndTables) {
+                String catalog = catalogAmdTable[0];
+                String table = catalogAmdTable[1];
                 for (String testSQL : testSQLs) {
-                    result[index] = Arguments.of(s, table, testSQL);
+                    result[index] = Arguments.of(catalog, table, testSQL);
                     index++;
                 }
-            }
+
         }
         return  result;
     }
@@ -120,6 +140,14 @@ public class IntegrationTests {
         return new String[]{
                 remote_table,
                 direct_table, };
+    }
+
+    private static String[][] getCatalogAndTables() {
+        return new String[][] {
+                {catalog, remote_table},
+                {catalog, direct_table},
+                {localCatalog, direct_table}
+        };
     }
 
     public static String[] getTestSQLs() {

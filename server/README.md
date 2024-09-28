@@ -49,7 +49,7 @@ Dev environment in windows
     ```.\mvnw test -DskipTests```
 
 Docker image 
-  - ```./mvnw package -Dpackaging=docker -DskipTests```
+  - ```../mvnw package -Dpackaging=docker -DskipTests```
 Docker native image
 
 Run the application 

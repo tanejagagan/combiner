@@ -2,3 +2,8 @@ Support Map Type. Currently its blocked on DuckDB/ Arrow fix
 Support Hive Table
 
 
+Queries to revisit
+q9, q44 ==> at org.apache.spark.sql.errors.DataTypeErrors$.decimalPrecisionExceedsMaxPrecisionError(DataTypeErrors.scala:48)
+Support more filtes ( q98 InBetween filter )
+TPCDS : Because of data_dim table not query can be executed without performing join and performance benefits of
+aggregate push down was negated. However even with parquet read functionality project and filter pushdown resulted in % performance improvement  

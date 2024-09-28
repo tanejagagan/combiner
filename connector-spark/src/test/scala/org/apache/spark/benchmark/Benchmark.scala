@@ -74,7 +74,11 @@ class Benchmark(
   def addCase(name: String, numIters: Int = 0)(f: Int => Unit): Unit = {
     addTimerCase(name, numIters) { timer =>
       timer.startTiming()
-      f(timer.iteration)
+      try {
+        f(timer.iteration)
+      } catch {
+        case ex : Exception => ex.printStackTrace()
+      }
       timer.stopTiming()
     }
   }

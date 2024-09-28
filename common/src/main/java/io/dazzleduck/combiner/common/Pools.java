@@ -30,7 +30,8 @@ public class Pools {
         Properties props = new Properties();
         props.setProperty(DuckDBDriver.JDBC_STREAM_RESULTS, String.valueOf(true));
         try {
-            connection = (DuckDBConnection) DriverManager.getConnection("jdbc:duckdb:", props);
+            var conn = (DuckDBConnection) DriverManager.getConnection("jdbc:duckdb:", props);
+            connection = conn;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -47,10 +48,10 @@ public class Pools {
         return conn;
     });
 
-    public static void setRuntimeConfig(Connection connection,
+    public static void setRuntimeConfig(Connection conn,
                                         Map<String, String> configs) throws SQLException {
         for (Map.Entry<String, String> e : configs.entrySet()) {
-            try(var statement = connection.createStatement()){
+            try(var statement = conn.createStatement()){
                 statement.execute(String.format("SET %s=%s", e.getKey(), e.getValue()));
             }
         }

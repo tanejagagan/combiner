@@ -34,6 +34,7 @@ class TPCDSDatagenArguments(val args: Array[String]) {
   var tableFilter: Set[String] = Set.empty
   var numPartitions = "100"
 
+
   parseArgs(args.toList)
   validateArguments()
 
