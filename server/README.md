@@ -32,7 +32,7 @@ Start Minio Docker
 Upload test Data to s3 
  Run ManualTestUtil.java file inside test dir
 Test with Series
-``` curl -v --output s.arrow http://localhost:8080/v1/q/series?size=100 ```
+```curl -v --output s.arrow -H "X-QueryId: 123" http://localhost:8080/v1/q/series?size=100```
 
 Test with File
 ```curl -v --output count.arrow -H "Content-Type: application/json" \

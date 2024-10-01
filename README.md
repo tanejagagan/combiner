@@ -5,8 +5,8 @@
 Lets analyze a typical query which has filter, project and aggregation.\
 `select sum(quantities_on_hand), warehouse_id from inventory where item_id = 123 group by warehouse_id`\
 where table `inventory` has schema `(date date, item_id int, warehouse_id int, quantity_on_hand int)`.\
-This query returns warehouse and sum of quantity on hand for an item_id 123.\ 
-This is how execution DAG for this query would look like
+This query returns warehouse and sum of quantity on hand for an item_id 123.\
+This is how execution DAG for this query would look like 
 
 ![Combiner](doc/image/map-reduce.svg)\
 1. First query engine would identify relevant parquet files. This step is generally executed on the master. 
@@ -25,8 +25,8 @@ Step 6 and 7 are again performed on executors. They can also be performed on mas
 This project decouples combiner steps (step 3,4 and 5) from rest of the query execution.
 ![Combiner](doc/image/combiner.svg)\
 The combiner is implemented using DuckDB. It can exist inside executor process or outside as a standalone web server
-Inside the executor process combiner and executors communicate using arrow C-Data interface.  
-If combiner is deployed as a standalone server protocol between combiner and executor is rest interface using arrow-ipc over http\
+Inside the executor process combiner and executors communicate using arrow C-Data interface.
+If combiner is deployed as a standalone server protocol between combiner and executor is rest interface using arrow-ipc over http
 
 Decoupling combiner with rest of the query engine would have several benefits
 
@@ -47,7 +47,8 @@ Decoupling combiner with rest of the query engine would have several benefits
   bin/spark-sql  --conf spark.jars.packages=org.duckdb:duckdb_jdbc:1.1.1 \
   --conf spark.jars=<path_of_git_repo>/connector-spark/target/connector-spark-0.0.1-jar-with-dependencies.jar \ 
   --conf spark.sql.catalog.dd=io.dazzleduck.combiner.catalog.CatalogImpl \
-  --conf spark.sql.extensions=io.dazzleduck.combiner.connector.spark.extension.DDExtensions```
+  --conf spark.sql.extensions=io.dazzleduck.combiner.connector.spark.extension.DDExtensions
+  ```
 
 - Create table <br> `create table spark_catalog.default.kv(key string, value string) using parquet location '/tmp/kv'; `
 - Insert values <br> `insert into table spark_catalog.default.kv values ('k1', 'v1'), ('k2', 'v2'), ('k1', 'v3') `
@@ -60,3 +61,43 @@ Decoupling combiner with rest of the query engine would have several benefits
 
 ![Combiner](doc/image/Screenshot-timing.png)\
 ![Combiner](doc/image/Screenshot-diff-plans.png)\
+
+## Setting up in Remote Mode
+In this mode combiner will be running in a separate docker container and execute combine stage.
+- Build combiner server docker.
+  ```../mvnw package -Dpackaging=docker -DskipTests```
+- Start minio docker.
+  ``` docker run --name minio --network="host" -v /tmp/minio:/data    quay.io/minio/minio server /data --console-address ":9001"```\
+- Run combiner container
+  ```docker run --name server -p 8080:8080  --network="host" server```
+- Test server is running fine by creating a series. This will create series.arrow file
+  ``` curl -v --output s.arrow -H "X-QueryId: 123" http://localhost:8080/v1/q/series?size=100```
+- Configure spark to be able to connect to connect to minio.
+  ```cd <SPARK_HOME>```
+  ```cp conf/spark-defaults.conf.template conf/spark-defaults.conf```
+-  Append the content to `conf/spark-default.conf` directory. 
+  ```
+spark.driver.memory              5g
+spark.hadoop.fs.s3a.access.key minioadmin
+spark.hadoop.fs.s3a.secret.key minioadmin
+spark.hadoop.fs.s3a.endpoint http://localhost:9000
+spark.hadoop.fs.s3a.path.style.access true
+spark.hadoop.fs.s3a.connection.ssl.enabled false
+spark.hadoop.fs.s3a.impl  org.apache.hadoop.fs.s3a.S3AFileSystem
+spark.hadoop.fs.s3a.connection.ssl.enabled" false
+spark.hadoop.fs.defaultFS s3a://spark
+spark.sql.extensions=io.dazzleduck.combiner.connector.spark.extension.DDExtensions
+  ```
+- Download aws jar files ` aws-java-sdk-bundle-1.12.770.jar` and `hadoop-aws-3.3.4.jar` from maven repo and copy them in `<SPARK_HOME>/jars` directory
+- Run spark
+  ```
+  bin/spark-sql --conf spark.jars.packages=org.duckdb:duckdb_jdbc:1.1.1 \
+  --conf spark.jars=<path_of_git_repo>/connector-spark/target/connector-spark-0.0.1-jar-with-dependencies.jar \ 
+  ```
+- Create table `create table spark_catalog.default.kv_s3(key string, value string) using parquet location '/kv_s3'`
+- Insert Data ` insert into table spark_catalog.default.kv_s3 values ('k1', 'v1'), ('k2', 'v2'), ('k1', 'v3')`
+- Create table to use combiner `create table dd.default.kv_s3 (key string, value string) using parquet options ('path' = 's3a://spark/kv_s3', 'url'='http://localhost:8080/v1/q/parquet', 's3_endpoint
+'='localhost:9000');`
+
+Difference in timing
+![Combiner](doc/image/Screenshot-timing-remote.png)\
