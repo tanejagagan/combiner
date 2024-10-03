@@ -2,31 +2,43 @@
 
 # 1 Introduction
 
-Lets analyze a typical query which has filter, project and aggregation.\
+Let's analyze a typical query which has filter, project and aggregation.\
 `select sum(quantities_on_hand), warehouse_id from inventory where item_id = 123 group by warehouse_id`\
-where table `inventory` has schema `(date date, item_id int, warehouse_id int, quantity_on_hand int)`.\
+The table `inventory` is
+```(date date,
+    item_id int,
+    warehouse_id int,
+    quantity_on_hand int)
+```
 This query returns warehouse and sum of quantity on hand for an item_id 123.\
-This is how execution DAG for this query would look like 
+Below is the execution DAG for this query. 
 
-![Combiner](doc/image/map-reduce.svg)\
-1. First query engine would identify relevant parquet files. This step is generally executed on the master. 
-2. Next execution engine would create multiple tasks based on the total size of relevant file. Each task would independently work on roughly 128MB of parquet files 
-3. Each task would read column chunks based on projection (item_id, warehouse_id, quantity_on_hamd)
-4. Next filter(item_id = 123) would be executed on each task
-5. On those filtered rows aggregation will be performed. 
-6. Those aggregated (combined) data will be shuffled for further aggregation
-7. Finally sort will be performed to produce the result.
+![Combiner](doc/image/map-reduce.svg)
 
-A Table may have TBs of data but relevant in files data for the query will be only few GBs which is read from the disk and after project, filter and combine this data is reduced to few MBs or KBs before its sent for shuffle.
-Step 3,4,5 can be attributed to CPU as well as time because disk read. They are also the steps which benefits the most from parallel processing.
-Step 1 and 2 are generally performed on the master
-Step 6 and 7 are again performed on executors. They can also be performed on master.
 
-This project decouples combiner steps (step 3,4 and 5) from rest of the query execution.
+**Query Engine Workflow**
+
+The query engine workflow involves several steps to efficiently process large datasets stored in parquet files.
+
+1. **Master Node**: The first step is executed on the master node, where the relevant parquet files are
+   identified based on query filters
+2. **Task Creation**: The execution engine creates stages and tasks based on the identified relevant
+   files. This query would require two stages. 
+3. **Combiner Stage ( Map and local Reduce)**: It's a combination of column chunk reading, applying filter and Aggregation. This stage is referred as combine in Map Reduce Framework.
+   Stage 1 would generally execute as part of multiple tasks. Each task would independently work on roughly 128MB of parquet files, reading column chunks, applying the filter and aggregating data
+4. **Reduce Stage ** Before execution of this stage data is shuffled based on aggregation key `warehouse_id`. On the shuffled data aggregation is performed to produce the final result
+5. **Collect**: Data is collected on the master. 
+
+A table may have TBs of data across thousands of files. Of those thousands of files only few files will be relevant.
+Of those relevant files only few chunks would contain actual data that need to read from disk. This data in further reduced by the aggregate operation in step 5
+Tasks in **Combiner stage** would read GB of data and reduce it to MBs or KBs
+This stage can be also be attributed to CPU as well as time because disk read. They are also the steps which benefits the most from parallel processing.
+
+This project decouples **Combiner Stage** from rest of the query execution. Its also serves as accelerator for those ubiquitous and resource intensive tasks in **Combiner Stage** .
 ![Combiner](doc/image/combiner.svg)\
 The combiner is implemented using DuckDB. It can exist inside executor process or outside as a standalone web server
 Inside the executor process combiner and executors communicate using arrow C-Data interface.
-If combiner is deployed as a standalone server protocol between combiner and executor is rest interface using arrow-ipc over http
+If combiner is deployed as a standalone server, protocol between combiner and executor is REST using arrow-ipc over http
 
 Decoupling combiner with rest of the query engine would have several benefits
 
@@ -38,7 +50,8 @@ Decoupling combiner with rest of the query engine would have several benefits
 
 
 
-## Getting started
+## Getting started.
+### Combiner and executor in the same process.
 
 - Create package <br> `/mvnw package -DskipTest`
 - Change dir to SPARK_HOME <br> `cd $SPARK_HOME`
@@ -62,7 +75,7 @@ Decoupling combiner with rest of the query engine would have several benefits
 ![Combiner](doc/image/Screenshot-timing.png)\
 ![Combiner](doc/image/Screenshot-diff-plans.png)\
 
-## Setting up in Remote Mode
+### Setting up Combiner in the Remote Mode
 In this mode combiner will be running in a separate docker container and execute combine stage.
 - Build combiner server docker.
   ```../mvnw package -Dpackaging=docker -DskipTests```
@@ -84,7 +97,7 @@ spark.hadoop.fs.s3a.endpoint http://localhost:9000
 spark.hadoop.fs.s3a.path.style.access true
 spark.hadoop.fs.s3a.connection.ssl.enabled false
 spark.hadoop.fs.s3a.impl  org.apache.hadoop.fs.s3a.S3AFileSystem
-spark.hadoop.fs.s3a.connection.ssl.enabled" false
+spark.hadoop.fs.s3a.connection.ssl.enabled  false
 spark.hadoop.fs.defaultFS s3a://spark
 spark.sql.extensions=io.dazzleduck.combiner.connector.spark.extension.DDExtensions
   ```
